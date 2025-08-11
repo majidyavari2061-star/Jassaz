@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>دکتر مجید فیاضیپور</title>
+<style>
+  body {
+    font-family: tahoma;
+    text-align: center;
+    background-color: #e0f0ff;
+    padding: 20px;
+  }
+  h1 {
+    color: #004a99;
+  }
+  #status {
+    font-size: 20px;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<h1>دکتر مجید فیاضیپور</h1>
+<p>تشخیص فاصله و پخش بوق با آستانه</p>
+<div id="status">در حال آماده‌سازی...</div>
+
+<script>
+let ctx = new (window.AudioContext || window.webkitAudioContext)();
+let oscillator;
+let beeping = false;
+
+// این تابع بوق ایجاد می‌کند
+function beep(freq, duration) {
+  oscillator = ctx.createOscillator();
+  oscillator.type = "square";
+  oscillator.frequency.setValueAtTime(freq, ctx.currentTime);
+  oscillator.connect(ctx.destination);
+  oscillator.start();
+  setTimeout(() => {
+    oscillator.stop();
+  }, duration);
+}
+
+// شبیه‌سازی فاصله (در حالت واقعی باید از سنسور یا API استفاده شود)
+function getDistance() {
+  return Math.random() * 200; // فاصله تصادفی 0 تا 200 سانتی‌متر
+}
+
+function checkDistance() {
+  let distance = getDistance();
+  let status = document.getElementById("status");
+
+  if (distance > 100) {
+    status.textContent = `فاصله زیاد: ${distance.toFixed(1)} سانتی‌متر - بدون بوق`;
+  } else if (distance > 30) {
+    status.textContent = `فاصله متوسط: ${distance.toFixed(1)} سانتی‌متر - بوق کند`;
+    beep(1000, 100); // فرکانس ۱۰۰۰ هرتز، مدت ۰.۱ ثانیه
+  } else {
+    status.textContent = `فاصله کم: ${distance.toFixed(1)} سانتی‌متر - بوق ممتد`;
+    beep(1000, 500); // بوق طولانی‌تر
+  }
+}
+
+setInterval(checkDistance, 1000);
+</script>
+
+</body>
+</html>
