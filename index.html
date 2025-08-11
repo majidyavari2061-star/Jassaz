@@ -1,69 +1,213 @@
 <!DOCTYPE html>
-<html lang="fa">
+<html lang="fa" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<title>دکتر مجید فیاضیپور</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>جاساز دکتر مجید فیاضیپور</title>
+<link rel="manifest" href="manifest.json">
 <style>
-  body {
-    font-family: tahoma;
-    text-align: center;
-    background-color: #e0f0ff;
-    padding: 20px;
-  }
-  h1 {
-    color: #004a99;
-  }
-  #status {
-    font-size: 20px;
-    margin-top: 20px;
-  }
+  :root{--accent:#0b84ff}
+  body{font-family:Tahoma, Arial, sans-serif;background:#f5f7fb;margin:0;padding:14px;color:#111}
+  .card{background:#fff;border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 6px 14px rgba(10,20,40,0.06)}
+  h1{margin:0 0 6px;font-size:18px;text-align:center}
+  label{display:block;margin-top:8px;font-size:14px}
+  input,textarea,button,select{font-size:15px;padding:10px;border-radius:8px;border:1px solid #e6eef9;box-sizing:border-box}
+  button{background:var(--accent);color:#fff;border:none}
+  .row{display:flex;gap:8px;margin-top:8px}
+  .list{margin-top:12px}
+  .item{display:flex;gap:10px;align-items:center;padding:10px;border-radius:10px;background:#fff;border:1px solid #eef6ff}
+  .thumb{width:64px;height:64px;border-radius:8px;background:#ddd;object-fit:cover}
+  .meta{flex:1}
+  .actions{display:flex;flex-direction:column;gap:6px}
+  .nav-panel{display:none;padding:14px;border-radius:10px;background:#fff;border:1px solid #eee;margin-top:14px;text-align:center}
+  .arrow{width:140px;height:140px;margin:auto;display:flex;align-items:center;justify-content:center}
+  .arrow svg{width:100%;height:100%;transform-origin:center center;transition:transform 150ms linear}
+  .distance{font-weight:700;margin-top:8px}
+  .muted{color:#666;font-size:13px}
 </style>
 </head>
 <body>
 
-<h1>دکتر مجید فیاضیپور</h1>
-<p>تشخیص فاصله و پخش بوق با آستانه</p>
-<div id="status">در حال آماده‌سازی...</div>
+<div class="card">
+  <h1>جاساز دکتر مجید فیاضی‌پور</h1>
+  <div class="muted" style="text-align:center">ذخیرهٔ نقطه با عکس — جستجو و راهنمایی با فلش — هشدار در نزدیکی</div>
+</div>
+
+<div class="card">
+  <label>نام مکان</label>
+  <input id="name" placeholder="مثلاً: کلید زیر خاک" />
+  <label>توضیحات (اختیاری)</label>
+  <textarea id="desc" rows="2" placeholder="مثلاً کنار درخت"></textarea>
+
+  <label style="margin-top:8px">عکس (دوربین یا گالری)</label>
+  <input id="photoInput" type="file" accept="image/*" capture="environment">
+
+  <div class="row">
+    <button id="saveBtn">📍 ذخیره مکان فعلی</button>
+    <button id="quickSaveBtn" style="background:#2a9d8f">⚡ ذخیره سریع</button>
+    <button id="enableSensorsBtn" style="background:#444">⚙️ فعال‌سازی حسگر جهت</button>
+  </div>
+  <div class="muted" style="margin-top:8px">نکته: برای دقت بیشتر قبل از ذخیره چند ثانیه صبر کن تا GPS قفل کند.</div>
+</div>
+
+<div class="card">
+  <h3 style="margin:0 0 8px">لیست مکان‌ها</h3>
+  <div id="list" class="list"></div>
+</div>
+
+<!-- پنل ناوبری -->
+<div id="navPanel" class="nav-panel">
+  <div id="navTitle" style="font-weight:800">در حال جستجو...</div>
+  <div class="arrow"><svg viewBox="0 0 100 100"><polygon points="50,5 90,95 50,75 10,95" fill="#0b84ff" id="arrowShape"/></svg></div>
+  <div class="distance" id="distanceText">فاصله: --</div>
+  <div class="muted" id="bearingText">جهت هدف: --</div>
+  <div style="margin-top:10px;display:flex;gap:8px;justify-content:center">
+    <button id="stopNav" style="background:#d33">توقف</button>
+    <button id="openMap" style="background:#666">باز کردن در نقشه</button>
+  </div>
+</div>
 
 <script>
-let ctx = new (window.AudioContext || window.webkitAudioContext)();
-let oscillator;
-let beeping = false;
+/* ===== داده‌ها و ذخیره‌سازی ساده با localStorage ===== */
+const KEY = "jasaaz_points_v4";
+let points = JSON.parse(localStorage.getItem(KEY) || "[]");
+const nameInput = document.getElementById("name");
+const descInput = document.getElementById("desc");
+const photoInput = document.getElementById("photoInput");
+const listDiv = document.getElementById("list");
+const saveBtn = document.getElementById("saveBtn");
+const quickSaveBtn = document.getElementById("quickSaveBtn");
+const enableSensorsBtn = document.getElementById("enableSensorsBtn");
 
-// این تابع بوق ایجاد می‌کند
-function beep(freq, duration) {
-  oscillator = ctx.createOscillator();
-  oscillator.type = "square";
-  oscillator.frequency.setValueAtTime(freq, ctx.currentTime);
-  oscillator.connect(ctx.destination);
-  oscillator.start();
-  setTimeout(() => {
-    oscillator.stop();
-  }, duration);
+nameInput.value = "جاساز دکتر مجید فیاضی‌پور";
+let currentImageData = null;
+
+// خواندن عکس انتخابی به dataURL
+photoInput.addEventListener("change", async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if(!f) { currentImageData = null; return; }
+  const reader = new FileReader();
+  reader.onload = () => { currentImageData = reader.result; };
+  reader.readAsDataURL(f);
+});
+
+/* نمایش لیست */
+function renderList(){
+  listDiv.innerHTML = "";
+  if(points.length===0){ listDiv.innerHTML = '<div class="muted">هیچ نقطه‌ای ذخیره نشده.</div>'; return; }
+  points.forEach((p, i) => {
+    const el = document.createElement("div");
+    el.className = "item";
+    el.innerHTML = `
+      <img class="thumb" src="${p.image||''}" onerror="this.style.display='none'"/>
+      <div class="meta">
+        <div style="font-weight:700">${escapeHtml(p.name)}</div>
+        <div class="muted">${escapeHtml(p.desc)}</div>
+        <div class="muted">عرض: ${p.lat.toFixed(7)}, طول: ${p.lng.toFixed(7)}</div>
+      </div>
+      <div class="actions">
+        <button onclick="startNav('${p.id}')">🔍 جستجو</button>
+        <button onclick="openMap(${p.lat},${p.lng})" style="background:#0b84ff">نقشه</button>
+        <button onclick="downloadPoint('${p.id}')" style="background:#777">دانلود</button>
+        <button onclick="deletePoint('${p.id}')" style="background:#e55">حذف</button>
+      </div>
+    `;
+    listDiv.appendChild(el);
+  });
+}
+function escapeHtml(s){ return String(s||"").replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+/* ذخیره نقطه */
+function addPoint(lat,lng,name,desc,image){
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  points.push({ id, name: name||"بدون نام", desc: desc||"", lat:+lat, lng:+lng, created: Date.now(), image: image || null });
+  localStorage.setItem(KEY, JSON.stringify(points));
+  renderList();
 }
 
-// شبیه‌سازی فاصله (در حالت واقعی باید از سنسور یا API استفاده شود)
-function getDistance() {
-  return Math.random() * 200; // فاصله تصادفی 0 تا 200 سانتی‌متر
+/* دکمه ذخیره دقیق */
+saveBtn.addEventListener("click", ()=>{
+  if(!navigator.geolocation){ alert("مرورگر شما از Geolocation پشتیبانی نمی‌کند."); return; }
+  saveBtn.disabled = true; saveBtn.textContent = "در حال گرفتن موقعیت...";
+  navigator.geolocation.getCurrentPosition(pos=>{
+    addPoint(pos.coords.latitude, pos.coords.longitude, nameInput.value, descInput.value, currentImageData);
+    saveBtn.disabled = false; saveBtn.textContent = "📍 ذخیره مکان فعلی";
+    nameInput.value = "جاساز دکتر مجید فیاضی‌پور";
+    descInput.value = "";
+    photoInput.value = "";
+    currentImageData = null;
+    alert("مکان ذخیره شد.");
+  }, err=>{
+    saveBtn.disabled = false; saveBtn.textContent = "📍 ذخیره مکان فعلی";
+    alert("خطا در دریافت موقعیت: " + err.message);
+  }, { enableHighAccuracy:true, timeout:15000, maximumAge:5000 });
+});
+
+/* ذخیره سریع با نام پیش‌فرض */
+quickSaveBtn.addEventListener("click", ()=>{
+  if(!navigator.geolocation){ alert("مرورگر شما از Geolocation پشتیبانی نمی‌کند."); return; }
+  quickSaveBtn.disabled = true; quickSaveBtn.textContent = "در حال گرفتن موقعیت...";
+  navigator.geolocation.getCurrentPosition(pos=>{
+    addPoint(pos.coords.latitude, pos.coords.longitude, "جاساز دکتر مجید فیاضی‌پور", descInput.value||"", currentImageData);
+    quickSaveBtn.disabled = false; quickSaveBtn.textContent = "⚡ ذخیره سریع";
+    descInput.value = ""; photoInput.value = ""; currentImageData = null;
+    alert("مکان ذخیره شد.");
+  }, err=>{
+    quickSaveBtn.disabled = false; quickSaveBtn.textContent = "⚡ ذخیره سریع";
+    alert("خطا: " + err.message);
+  }, { enableHighAccuracy:true, timeout:15000, maximumAge:5000 });
+});
+
+/* حذف، دانلود */
+function deletePoint(id){
+  if(!confirm("آیا از حذف این نقطه مطمئنی؟")) return;
+  points = points.filter(p=>p.id!==id); localStorage.setItem(KEY, JSON.stringify(points)); renderList();
+}
+function downloadPoint(id){
+  const p = points.find(x=>x.id===id);
+  if(!p) return alert("نقطه پیدا نشد");
+  // دانلود JSON شامل متادیتا و تصویر (اگر موجود)
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(p, null, 2)], {type:"application/json"}));
+  a.download = (p.name||"point") + ".json";
+  a.click();
 }
 
-function checkDistance() {
-  let distance = getDistance();
-  let status = document.getElementById("status");
-
-  if (distance > 100) {
-    status.textContent = `فاصله زیاد: ${distance.toFixed(1)} سانتی‌متر - بدون بوق`;
-  } else if (distance > 30) {
-    status.textContent = `فاصله متوسط: ${distance.toFixed(1)} سانتی‌متر - بوق کند`;
-    beep(1000, 100); // فرکانس ۱۰۰۰ هرتز، مدت ۰.۱ ثانیه
-  } else {
-    status.textContent = `فاصله کم: ${distance.toFixed(1)} سانتی‌متر - بوق ممتد`;
-    beep(1000, 500); // بوق طولانی‌تر
-  }
+/* باز کردن در نقشه */
+function openMap(lat,lng){
+  window.open(`https://maps.google.com/?q=${lat},${lng}`, "_blank");
 }
 
-setInterval(checkDistance, 1000);
-</script>
+/* ===== ناوبری (فاصله، جهت، کمپاس، بوق) ===== */
+const navPanel = document.getElementById("navPanel");
+const arrowShape = document.getElementById("arrowShape");
+const distanceText = document.getElementById("distanceText");
+const bearingText = document.getElementById("bearingText");
+const stopNavBtn = document.getElementById("stopNav");
+const openMapBtn = document.getElementById("openMap");
 
-</body>
-</html>
+let navTarget = null;
+let watchId = null;
+let currentHeading = null;
+let deviceOrientationActive = false;
+let audioCtx = null;
+let beepIntervalId = null;
+let continuousOsc = null;
+
+// آستانه‌ها (متر)
+const THRESHERS = { far: 10, medium: 2, close: 0.3 };
+
+function toRad(d){ return d*Math.PI/180; }
+function toDeg(r){ return r*180/Math.PI; }
+
+function haversineDistance(lat1,lon1,lat2,lon2){
+  const R = 6371000;
+  const φ1 = toRad(lat1), φ2 = toRad(lat2);
+  const Δφ = toRad(lat2-lat1), Δλ = toRad(lon2-lon1);
+  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function bearingTo(lat1,lon1,lat2,lon2){
+  const φ1 = toRad(lat1), φ2 = toRad(lat2);
+  const λ1 = toRad(lon1), λ2 = toRad(lon2);
+  const y = Math.sin(λ2
